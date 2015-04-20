@@ -1,72 +1,60 @@
 require 'dp'
-
+require 'VGGNet'
+require('mobdebug').start()
 --[[command line arguments]]--
 cmd = torch.CmdLine()
 cmd:text()
 cmd:text('Image Classification using VGGNet')
 cmd:text('Example:')
-cmd:text('$> th train.lua --batchSize 128 --momentum 0.5')
+cmd:text('$> th train.lua --batchSize 256 --momentum 0.9')
 cmd:text('Options:')
-cmd:option('--learningRate', 0.1, 'learning rate at t=0')
-cmd:option('--decayPoint', 10, 'epoch at which learning rate is decayed')
-cmd:option('--decayFactor', 0.0005, 'factory by which learning rate is decayed at decay point')
-cmd:option('--maxOutNorm', 1, 'max norm each layers output neuron weights')
-cmd:option('--maxNormPeriod', 2, 'Applies MaxNorm Visitor every maxNormPeriod batches')
-cmd:option('--momentum', 0, 'momentum')
-cmd:option('--batchSize', 128, 'number of examples per batch')
+cmd:option('--dataPath', paths.concat(dp.DATA_DIR, 'ImageNet'), 'path to ImageNet')
+cmd:option('--trainPath', '', 'Path to train set. Defaults to --dataPath/ILSVRC2012_img_train')
+cmd:option('--validPath', '', 'Path to valid set. Defaults to --dataPath/ILSVRC2012_img_val')
+cmd:option('--metaPath', '', 'Path to metadata. Defaults to --dataPath/metadata')
+cmd:option('--learningRate', 0.01, 'learning rate at t=0')
+cmd:option('--maxOutNorm', -1, 'max norm each layers output neuron weights')
+cmd:option('-weightDecay', 5e-4, 'weight decay')
+cmd:option('--maxNormPeriod', 1, 'Applies MaxNorm Visitor every maxNormPeriod batches')
+cmd:option('--momentum', 0.9, 'momentum') 
+cmd:option('--batchSize', 256, 'number of examples per batch')
 cmd:option('--cuda', true, 'use CUDA')
 cmd:option('--useDevice', 1, 'sets the device (GPU) to use')
+cmd:option('--trainEpochSize', -1, 'number of train examples seen between each epoch')
 cmd:option('--maxEpoch', 100, 'maximum number of epochs to run')
 cmd:option('--maxTries', 30, 'maximum number of epochs to try to find a better local minima for early-stopping')
-cmd:option('--dataset', 'Mnist', 'which dataset to use : Mnist | NotMnist | Cifar10 | Cifar100 | Svhn')
-cmd:option('--standardize', false, 'apply Standardize preprocessing')
-cmd:option('--zca', false, 'apply Zero-Component Analysis whitening')
-cmd:option('--lecunlcn', false, 'apply Yann LeCun Local Contrast Normalization (recommended)')
-cmd:option('--normalInit', false, 'initialize inputs using a normal distribution (as opposed to sparse initialization)')
+cmd:option('--accUpdate', false, 'accumulate gradients inplace')
+cmd:option('--verbose', false, 'print verbose messages')
 cmd:option('--progress', true, 'print progress bar')
-cmd:option('--silent', false, 'dont print anything to stdout')
+cmd:option('--nThread', 2, 'allocate threads for loading images from disk. Requires threads-ffi.')
 cmd:text()
 opt = cmd:parse(arg or {})
+
+opt.trainPath = (opt.trainPath == '') and paths.concat(opt.dataPath, 'ILSVRC2012_img_train') or opt.trainPath
+opt.validPath = (opt.validPath == '') and paths.concat(opt.dataPath, 'ILSVRC2012_img_val') or opt.validPath
+opt.metaPath = (opt.metaPath == '') and paths.concat(opt.dataPath, 'metadata') or opt.metaPath
 
 if not opt.silent then
   table.print(opt)
 end
 
---[[preprocessing]]--
-local input_preprocess = {}
-if opt.standardize then
-  table.insert(input_preprocess, dp.Standardize())
-end
-if opt.zca then
-  table.insert(input_preprocess, dp.ZCA())
-end
-if opt.lecunlcn then
-  table.insert(input_preprocess, dp.GCN())
-  table.insert(input_preprocess, dp.LeCunLCN{progress=true})
-end
-
 --[[data]]--
+datasource = dp.ImageNet{
+   train_path=opt.trainPath, valid_path=opt.validPath, 
+   meta_path=opt.metaPath, verbose=opt.verbose
+}
 
-local datasource
-if opt.dataset == 'Mnist' then
-  datasource = dp.Mnist{input_preprocess = input_preprocess}
-elseif opt.dataset == 'NotMnist' then
-  datasource = dp.NotMnist{input_preprocess = input_preprocess}
-elseif opt.dataset == 'Cifar10' then
-  datasource = dp.Cifar10{input_preprocess = input_preprocess}
-elseif opt.dataset == 'Cifar100' then
-  datasource = dp.Cifar100{input_preprocess = input_preprocess}
-elseif opt.dataset == 'Svhn' then
-  datasource = dp.Svhn{input_preprocess = input_preprocess}
-else
-  error("Unknown Dataset")
-end
+--[[preprocessing]]--
+ppf = datasource:normalizePPF()
 
 --[[model]]--
-
 mlp = dp.Sequential{
   models = {
-    VGGNet
+    dp.VGGNet{
+      inputSize = 3,
+      inputHeight = 224,
+      inputWidth = 224,
+    }
   }
 }
 
@@ -75,7 +63,7 @@ local visitor = {
   dp.Learn{
     learning_rate = opt.learningRate, 
     observer = dp.LearningRateSchedule{
-      schedule = {[opt.decayPoint]=opt.learningRate*opt.decayFactor}
+         schedule={[1]=1e-2,[19]=5e-3,[30]=1e-3,[44]=5e-4,[53]=1e-4}
     }
   },
   dp.MaxNorm{max_out_norm = opt.maxOutNorm, period=opt.maxNormPeriod}
@@ -86,36 +74,52 @@ train = dp.Optimizer{
   loss = dp.NLL(),
   visitor = visitor,
   feedback = dp.Confusion(),
-  sampler = dp.ShuffleSampler{batch_size = opt.batchSize},
+  sampler = dp.RandomSampler{
+      batch_size = opt.batchSize, epoch_size = opt.trainEpochSize, ppf = ppf
+   },
   progress = opt.progress
 }
 valid = dp.Evaluator{
-  loss = dp.NLL(),
-  feedback = dp.Confusion(),  
-  sampler = dp.Sampler{batch_size = opt.batchSize}
+   loss = dp.NLL(),
+   feedback = dp.TopCrop{n_top={1,5,10},n_crop=10,center=2},  
+   sampler = dp.Sampler{
+      batch_size=math.round(opt.batchSize/10),
+      ppf=ppf
+   }
 }
 test = dp.Evaluator{
-  loss = dp.NLL(),
-  feedback = dp.Confusion(),
-  sampler = dp.Sampler{batch_size = opt.batchSize}
+   loss = dp.NLL(),
+   feedback = dp.TopCrop{n_top={1,5,10},n_crop=10,center=2},  
+   sampler = dp.Sampler{
+      batch_size=math.round(opt.batchSize/10),
+      ppf=ppf
+   }
 }
+
+--[[multithreading]]--
+if opt.nThread > 0 then
+   datasource:multithread(opt.nThread)
+   train:sampler():async()
+   valid:sampler():async()
+   test:sampler():async()
+end
 
 --[[Experiment]]--
 xp = dp.Experiment{
-  model = mlp,
-  optimizer = train,
-  validator = valid,
-  tester = test,
-  observer = {
-    dp.FileLogger(),
-    dp.EarlyStopper{
-      error_report = {'validator','feedback','confusion','accuracy'},
-      maximize = true,
-      max_epochs = opt.maxTries
-    }
-  },
-  random_seed = os.time(),
-  max_epoch = opt.maxEpoch
+   model = model,
+   optimizer = train,
+   validator = valid,
+   tester = test,
+   observer = {
+      dp.FileLogger(),
+      dp.EarlyStopper{
+         error_report = {'validator','feedback','topcrop','all',5},
+         maximize = true,
+         max_epochs = opt.maxTries
+      }
+   },
+   random_seed = os.time(),
+   max_epoch = opt.maxEpoch
 }
 
 --[[GPU or CPU]]--
