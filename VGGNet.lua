@@ -3,7 +3,7 @@ VGGNet.isVGGNet = true
 
 function VGGNet:__init(config)
   assert(type(config) == 'table', "Constructor requires key-value arguments")
-  local args, inputHeight, inputWidth, inputSize,typename = xlua.unpack(
+  local args, inputSize, inputHeight, inputWidth, typename = xlua.unpack(
       {config},
       'VGGNet', 
       '2x conv3-64 -> maxpool -> 2x conv3-128 -> maxpool-> 2x conv3-256 -> maxpool -> 3x conv3-512 -> maxpool -> 3x conv3-512 -> maxpool '..
@@ -26,10 +26,10 @@ function VGGNet:__init(config)
   self._module = nn.Sequential()
   self._transfer = nn.ReLU()
 
-  
+  self._config = {}
   -- 16-layer config
 
-  self._config.conv={
+  self._config.conv = {
     -- 2x conv3-64 
     {type = "CONV", nInputPlane = 3, nOutputPlane = 64, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
     {type = "CONV", nInputPlane = 64, nOutputPlane = 64, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
@@ -84,7 +84,8 @@ function VGGNet:__init(config)
       local conv = nn.SpatialConvolutionMM(
          v.nInputPlane, v.nOutputPlane, 
          v.kernel_size, v.kernel_size, 
-         v.kernel_stride, v.kernel_stride
+         v.kernel_stride, v.kernel_stride,
+         v.pad
       )
       table.insert(self._param_modules, conv)
       self._module:add(conv)
@@ -92,7 +93,7 @@ function VGGNet:__init(config)
       
     elseif v.type == "MAXPOOL" then
       
-      local max_pool = nn.SpatialConvolutionMM(
+      local max_pool = nn.SpatialMaxPooling(
          v.pool_size, v.pool_size, 
          v.pool_stride, v.pool_stride
       )
@@ -100,16 +101,17 @@ function VGGNet:__init(config)
       
     end
   end
-  
+  -- Testing
+  local output = self._module:forward(torch.Tensor(2, self._input_size, self._input_height, self._input_width))
   -- Then we need to get the output size of the conv part
-  inputSize, height, width = self:outputSize(self._input_height, self._input_width, 'bchw')
+  inputSize, height, width = output:size(2),output:size(3),output:size(4)
   inputSize = inputSize*height*width
   
   -- Builds the fc part
   for k,v in pairs(self._config.fc) do
     
     if v.type == "FC" then
-      self._module:add(nn.Linear(inputSize,v.output_size)
+      self._module:add(nn.Linear(inputSize,v.output_size))
       self._module:add(v.transfer:clone())
       inputSize = v.output_size
     elseif v.type == "DROPOUT" then
