@@ -112,7 +112,9 @@ function VGGNet:__init(config)
     
     if v.type == "FC" then
       self._module:add(nn.Linear(inputSize,v.output_size))
-      self._module:add(v.transfer:clone())
+      if v.transfer then
+        self._module:add(v.transfer:clone())
+      end
       inputSize = v.output_size
     elseif v.type == "DROPOUT" then
       self._module:add(nn.Dropout(v.dropout_prob))
