@@ -21,55 +21,60 @@ cmd:text()
 opt = cmd:parse(arg or {})
 
 if opt.what == 'all' then 
-   opt.urls = {opt.trainURL, opt.validURL, opt.testURL, opt.devkitURL, opt.metaURL}
+  opt.urls = {opt.trainURL, opt.validURL, opt.testURL, opt.devkitURL, opt.metaURL}
 else
-   opt.urls = {opt[opt.what..'URL']}
+  opt.urls = {opt[opt.what..'URL']}
 end
 
 dp.mkdir(opt.savePath)
 assert(paths.dirp(opt.savePath), 'error creating --savePath')
 
 for i, url in ipairs(opt.urls) do
-   local tarName = paths.basename(url)
-   local tarPath = paths.concat(opt.savePath, tarName)
-   
-   -- download file
-   if paths.filep(tarPath) and not opt.squash then
-      print(string.format("skipping download as dir %s already exists. Use --squash to squash", tarPath))
-   else
-      if paths.filep(tarPath) then
-         os.execute("rm "..tarPath)
-      end
-      dp.do_with_cwd(opt.savePath, function() dp.download_file(url) end)
-   end
-   
-   -- extract file
-   local extractPath = paths.concat(opt.savePath, tarName:match("([^.]*)%."))
-   if paths.dirp(extractPath) and not opt.squash then
+  local tarName = paths.basename(url)
+  local tarPath = paths.concat(opt.savePath, tarName)
+
+  -- download file
+  if paths.filep(tarPath) and not opt.squash then
+    print(string.format("skipping download as dir %s already exists. Use --squash to squash", tarPath))
+  else
+    if paths.filep(tarPath) then
+      os.execute("rm "..tarPath)
+    end
+    dp.do_with_cwd(opt.savePath, function() dp.download_file(url) end)
+    end
+
+    -- extract file
+    local extractPath = paths.concat(opt.savePath, tarName:match("([^.]*)%."))
+    if paths.dirp(extractPath) and not opt.squash then
       print(string.format("skipping extraction as dir %s already exists. Use --squash to squash", extractPath))
-   else
+    else
       if paths.dirp(tarPath) then
-         paths.rmdir(tarPath)
+        paths.rmdir(tarPath)
       end
       print(string.format("extracting downloaded file : %s", tarPath))
-      
+
       dp.do_with_cwd(opt.savePath,
-         function()
+          function()
             dp.decompress_file(tarPath, (not tarPath:find('devkit')) and extractPath or nil)
-         end)
-      assert(paths.dirp(extractPath), string.format("expecting tar %s to be extracted at %s", tarName, extractPath))
-      -- for the training directory, which contains a tar for each class
-      for subTar in lfs.dir(extractPath) do 
-         local subDir = subTar:match("([^.]*)%.tar")
-         if subDir then
+          end)
+        assert(paths.dirp(extractPath), string.format("expecting tar %s to be extracted at %s", tarName, extractPath))
+        -- for the training directory, which contains a tar for each class
+        for subTar in lfs.dir(extractPath) do 
+          local subDir = subTar:match("([^.]*)%.tar")
+          if subDir then
             local subExtractPath = paths.concat(extractPath, subDir)
             local subTarPath = paths.concat(extractPath, subTar)
             if paths.dirp(subExtractPath) and not opt.squash then
-               print(string.format("skipping extraction as dir %s already exists. Use --squash to squash", subExtractPath))
+              print(string.format("skipping extraction as dir %s already exists. Use --squash to squash", subExtractPath))
             else
-               dp.decompress_tarball(subTarPath, subExtractPath)
+              dp.decompress_tarball(subTarPath, subExtractPath)
+              os.execute("rm "..subTarPath)
             end
-         end
+          end
+        end
       end
-   end
-end
+      -- Delete tar file
+      if paths.filep(tarPath) then
+        os.execute("rm "..tarPath)
+      end
+    end
