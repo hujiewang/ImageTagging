@@ -29,6 +29,8 @@ function VGGNet:__init(config)
   self._config = {}
   -- 16-layer config
 
+  -- Here we use 'A' configuration instead 'D' configuration to reduce memory usage
+  --[[
   self._config.conv = {
     -- 2x conv3-64 
     {type = "CONV", nInputPlane = 3, nOutputPlane = 64, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
@@ -58,7 +60,31 @@ function VGGNet:__init(config)
     {type = "MAXPOOL", pool_size = 2, pool_stride = 2},
     
   }
-  
+  --]]
+  self._config.conv = {
+    -- 1x conv3-64 
+    {type = "CONV", nInputPlane = 3, nOutputPlane = 64, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
+    {type = "MAXPOOL", pool_size = 2, pool_stride = 2},
+    
+    -- 1x conv3-128 
+    {type = "CONV", nInputPlane = 64, nOutputPlane = 128, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
+    {type = "MAXPOOL", pool_size = 2, pool_stride = 2},
+    
+    -- 1x conv3-256 
+    {type = "CONV", nInputPlane = 128, nOutputPlane = 256, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
+    {type = "MAXPOOL", pool_size = 2, pool_stride = 2},
+    
+    -- 2x conv3-512
+    {type = "CONV", nInputPlane = 256, nOutputPlane = 512, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
+    {type = "CONV", nInputPlane = 512, nOutputPlane = 512, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
+    {type = "MAXPOOL", pool_size = 2, pool_stride = 2},
+    
+    -- 2x conv3-512
+    {type = "CONV", nInputPlane = 512, nOutputPlane = 512, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
+    {type = "CONV", nInputPlane = 512, nOutputPlane = 512, kernel_size = 3, pad = 1, kernel_stride = 1, transfer = self._transfer},
+    {type = "MAXPOOL", pool_size = 2, pool_stride = 2},
+    
+  }
   self._config.fc={
     
     -- FC-4096
