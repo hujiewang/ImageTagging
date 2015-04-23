@@ -107,6 +107,9 @@ function VGGNet:__init(config)
   inputSize, height, width = output:size(2),output:size(3),output:size(4)
   inputSize = inputSize*height*width
   
+  -- Reshapes the conv part
+  self._module:add(nn.Reshape(inputSize))
+
   -- Builds the fc part
   for k,v in pairs(self._config.fc) do
     
@@ -124,8 +127,8 @@ function VGGNet:__init(config)
   
   config.typename = typename
   config.input_view = 'bchw'
-  config.output_view = 'bchw'
-  config.output = dp.ImageView()
+  config.output_view = 'bf'
+  config.output = dp.ClassView()
   parent.__init(self, config)
 end
 
