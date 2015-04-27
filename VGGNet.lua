@@ -3,7 +3,7 @@ VGGNet.isVGGNet = true
 
 function VGGNet:__init(config)
   assert(type(config) == 'table', "Constructor requires key-value arguments")
-  local args, inputSize, inputHeight, inputWidth, typename = xlua.unpack(
+  local args, inputSize, inputHeight, inputWidth, usingCudnn, typename = xlua.unpack(
       {config},
       'VGGNet', 
       '2x conv3-64 -> maxpool -> 2x conv3-128 -> maxpool-> 2x conv3-256 -> maxpool -> 3x conv3-512 -> maxpool -> 3x conv3-512 -> maxpool '..
@@ -14,6 +14,8 @@ function VGGNet:__init(config)
        help='Image height'},
       {arg='inputWidth', type='number', req=true,
        help='Image width'},
+      {arg='usingCudnn', type='boolean', req=true,
+       help='using cudnn'},
       {arg='typename', type='string', default='VGGNet', 
        help='identifies Model type in reports.'}
     )
@@ -25,6 +27,16 @@ function VGGNet:__init(config)
   self._param_modules = {}
   self._module = nn.Sequential()
   self._transfer = nn.ReLU()
+  self._SpatialConvolution = nn.SpatialConvolutionMM
+  self._SpatialMaxPooling = nn.SpatialMaxPooling
+  
+  if usingCudnn then
+     require 'cudnn'
+     print('Using cudnn')
+     self._transfer = cudnn.ReLU()
+     self._SpatialConvolution = cudnn.SpatialConvolution
+     self._SpatialMaxPooling = cudnn.SpatialMaxPooling
+  end
 
   self._config = {}
   -- 16-layer config
@@ -106,8 +118,7 @@ function VGGNet:__init(config)
   for k,v in pairs(self._config.conv) do
 
     if v.type == "CONV" then
-      
-      local conv = nn.SpatialConvolutionMM(
+      local conv = self._SpatialConvolution(
          v.nInputPlane, v.nOutputPlane, 
          v.kernel_size, v.kernel_size, 
          v.kernel_stride, v.kernel_stride,
@@ -119,7 +130,7 @@ function VGGNet:__init(config)
       
     elseif v.type == "MAXPOOL" then
       
-      local max_pool = nn.SpatialMaxPooling(
+      local max_pool = self._SpatialMaxPooling(
          v.pool_size, v.pool_size, 
          v.pool_stride, v.pool_stride
       )

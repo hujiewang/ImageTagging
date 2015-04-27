@@ -18,7 +18,7 @@ cmd:option('--maxOutNorm', -1, 'max norm each layers output neuron weights')
 cmd:option('-weightDecay', 5e-4, 'weight decay')
 cmd:option('--maxNormPeriod', 1, 'Applies MaxNorm Visitor every maxNormPeriod batches')
 cmd:option('--momentum', 0.9, 'momentum') 
-cmd:option('--batchSize', 19, 'number of examples per batch')
+cmd:option('--batchSize', 18, 'number of examples per batch')
 cmd:option('--cuda', true, 'use CUDA')
 cmd:option('--useDevice', 1, 'sets the device (GPU) to use')
 cmd:option('--trainEpochSize', -1, 'number of train examples seen between each epoch')
@@ -27,8 +27,9 @@ cmd:option('--maxTries', 30, 'maximum number of epochs to try to find a better l
 cmd:option('--accUpdate', false, 'accumulate gradients inplace')
 cmd:option('--verbose', false, 'print verbose messages')
 cmd:option('--progress', true, 'print progress bar')
-cmd:option('--nThread', 0, 'allocate threads for loading images from disk. Requires threads-ffi.')
+cmd:option('--nThread', 4, 'allocate threads for loading images from disk. Requires threads-ffi.')
 cmd:text()
+cmd:option('--usingCudnn', true, 'use cudnn instead of cunn')
 opt = cmd:parse(arg or {})
 
 opt.trainPath = (opt.trainPath == '') and paths.concat(opt.dataPath, 'ILSVRC2012_img_train') or opt.trainPath
@@ -48,12 +49,25 @@ datasource = dp.ImageNet{
 --[[preprocessing]]--
 ppf = datasource:normalizePPF()
 
+--[[GPU or CPU]]--
+if opt.cuda then
+  require 'cutorch'
+  if usingCudnn then
+     require 'cudnn'
+  else
+     require 'cunn'
+  end
+  torch.setdefaulttensortype('torch.CudaTensor')
+  cutorch.setDevice(opt.useDevice)
+end
+
 --[[model]]--
 mlp = dp.Sequential()
 mlp:add(dp.VGGNet{
       inputSize = 3,
       inputHeight = 224,
       inputWidth = 224,
+      usingCudnn = opt.usingCudnn,
     })
 local visitor = {
   dp.Momentum{momentum_factor = opt.momentum},
@@ -123,9 +137,6 @@ xp = dp.Experiment{
 
 --[[GPU or CPU]]--
 if opt.cuda then
-  require 'cutorch'
-  require 'cunn'
-  cutorch.setDevice(opt.useDevice)
   xp:cuda()
 end
 
