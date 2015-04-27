@@ -109,6 +109,8 @@ xp = dp.Experiment{
    observer = {
       dp.FileLogger(),
       dp.EarlyStopper{
+         save_strategy = dp.SaveModel(),
+         start_epoch = 1,
          error_report = {'validator','feedback','topcrop','all',5},
          maximize = true,
          max_epochs = opt.maxTries
