@@ -1,5 +1,6 @@
 require 'dp'
 require 'VGGNet'
+require 'SaveModel'
 --require('mobdebug').start()
 --[[command line arguments]]--
 cmd = torch.CmdLine()
