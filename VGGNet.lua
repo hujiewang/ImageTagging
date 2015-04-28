@@ -3,7 +3,7 @@ VGGNet.isVGGNet = true
 
 function VGGNet:__init(config)
   assert(type(config) == 'table', "Constructor requires key-value arguments")
-  local args, inputSize, inputHeight, inputWidth, usingCudnn, typename = xlua.unpack(
+  local args, inputSize, inputHeight, inputWidth, cuda, usingCudnn, typename = xlua.unpack(
       {config},
       'VGGNet', 
       '2x conv3-64 -> maxpool -> 2x conv3-128 -> maxpool-> 2x conv3-256 -> maxpool -> 3x conv3-512 -> maxpool -> 3x conv3-512 -> maxpool '..
@@ -14,12 +14,15 @@ function VGGNet:__init(config)
        help='Image height'},
       {arg='inputWidth', type='number', req=true,
        help='Image width'},
+      {arg='cuda', type='boolean', req=true,
+       help='using cuda'},
       {arg='usingCudnn', type='boolean', req=true,
        help='using cudnn'},
       {arg='typename', type='string', default='VGGNet', 
        help='identifies Model type in reports.'}
     )
-   
+  
+  assert((usingCudnn and cuda) or (not usingCudann),'cuda must be true while using cudnn') 
   self._input_size = inputSize
   self._input_height = inputHeight
   self._input_width = inputWidth
@@ -118,12 +121,22 @@ function VGGNet:__init(config)
   for k,v in pairs(self._config.conv) do
 
     if v.type == "CONV" then
-      local conv = self._SpatialConvolution(
-         v.nInputPlane, v.nOutputPlane, 
-         v.kernel_size, v.kernel_size, 
-         v.kernel_stride, v.kernel_stride,
-         v.pad
-      )
+      local conv
+      if not usingCudnn then
+      	 conv = self._SpatialConvolution(
+               v.nInputPlane, v.nOutputPlane, 
+               v.kernel_size, v.kernel_size, 
+               v.kernel_stride, v.kernel_stride,
+               v.pad
+      	  )
+      else
+         conv = self._SpatialConvolution(
+               v.nInputPlane, v.nOutputPlane, 
+               v.kernel_size, v.kernel_size, 
+               v.kernel_stride, v.kernel_stride,
+               v.pad, v.pad
+      	  )
+      end
       table.insert(self._param_modules, conv)
       self._module:add(conv)
       self._module:add(v.transfer:clone())
@@ -138,10 +151,20 @@ function VGGNet:__init(config)
       
     end
   end
-  -- Testing
-  local output = self._module:forward(torch.Tensor(2, self._input_size, self._input_height, self._input_width))
+  --[[
+  local output
+  if cuda then
+     output = self._module:forward(torch.CudaTensor(2, self._input_size, self._input_height, self._input_width))
+  else
+     output = self._module:forward(torch.Tensor(2, self._input_size, self._input_height, self._input_width))
+  end
+  
   -- Then we need to get the output size of the conv part
   inputSize, height, width = output:size(2),output:size(3),output:size(4)
+  --]]
+  inputSize = 512
+  height = 7
+  width = 7 
   inputSize = inputSize*height*width
   
   -- Reshapes the conv part
@@ -158,14 +181,15 @@ function VGGNet:__init(config)
       inputSize = v.output_size
     elseif v.type == "DROPOUT" then
       self._module:add(nn.Dropout(v.dropout_prob))
+    elseif v.type == "LOGSOFTMAX" then
+      self._module:add(nn.LogSoftMax())
     end
     
   end
-  
   config.typename = typename
   config.input_view = 'bchw'
   config.output_view = 'bf'
-  config.output = dp.ClassView()
+  config.output = dp.DataView()
   parent.__init(self, config)
 end
 

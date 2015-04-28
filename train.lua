@@ -22,14 +22,14 @@ cmd:option('--batchSize', 18, 'number of examples per batch')
 cmd:option('--cuda', true, 'use CUDA')
 cmd:option('--useDevice', 1, 'sets the device (GPU) to use')
 cmd:option('--trainEpochSize', -1, 'number of train examples seen between each epoch')
-cmd:option('--maxEpoch', 100, 'maximum number of epochs to run')
+cmd:option('--maxEpoch', 50, 'maximum number of epochs to run')
 cmd:option('--maxTries', 30, 'maximum number of epochs to try to find a better local minima for early-stopping')
 cmd:option('--accUpdate', false, 'accumulate gradients inplace')
 cmd:option('--verbose', false, 'print verbose messages')
 cmd:option('--progress', true, 'print progress bar')
 cmd:option('--nThread', 4, 'allocate threads for loading images from disk. Requires threads-ffi.')
 cmd:text()
-cmd:option('--usingCudnn', true, 'use cudnn instead of cunn')
+cmd:option('--usingCudnn', false, 'use cudnn instead of cunn')
 opt = cmd:parse(arg or {})
 
 opt.trainPath = (opt.trainPath == '') and paths.concat(opt.dataPath, 'ILSVRC2012_img_train') or opt.trainPath
@@ -54,10 +54,9 @@ if opt.cuda then
   require 'cutorch'
   if usingCudnn then
      require 'cudnn'
-  else
-     require 'cunn'
   end
-  torch.setdefaulttensortype('torch.CudaTensor')
+  require 'cunn'
+  --torch.setdefaulttensortype('torch.CudaTensor')
   cutorch.setDevice(opt.useDevice)
 end
 
@@ -67,6 +66,7 @@ mlp:add(dp.VGGNet{
       inputSize = 3,
       inputHeight = 224,
       inputWidth = 224,
+      cuda = opt.cuda,
       usingCudnn = opt.usingCudnn,
     })
 local visitor = {
