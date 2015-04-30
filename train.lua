@@ -26,7 +26,7 @@ cmd:option('--maxEpoch', 50, 'maximum number of epochs to run')
 cmd:option('--maxTries', 30, 'maximum number of epochs to try to find a better local minima for early-stopping')
 cmd:option('--accUpdate', false, 'accumulate gradients inplace')
 cmd:option('--verbose', false, 'print verbose messages')
-cmd:option('--progress', true, 'print progress bar')
+cmd:option('--progress', false, 'print progress bar')
 cmd:option('--nThread', 4, 'allocate threads for loading images from disk. Requires threads-ffi.')
 cmd:text()
 cmd:option('--usingCudnn', false, 'use cudnn instead of cunn')
@@ -93,7 +93,7 @@ train = dp.Optimizer{
 valid = dp.Evaluator{
    verbose = true,
    stats =true,
-   progress = true,
+   progress = opt.progress,
    loss = dp.NLL(),
    feedback = dp.TopCrop{n_top={1,5,10},n_crop=10,center=2},  
    sampler = dp.Sampler{
