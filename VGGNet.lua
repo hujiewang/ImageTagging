@@ -189,7 +189,7 @@ function VGGNet:__init(config)
   config.typename = typename
   config.input_view = 'bchw'
   config.output_view = 'bf'
-  config.output = dp.DataView()
+  config.output = dp.ClassView()
   parent.__init(self, config)
 end
 

@@ -18,7 +18,7 @@ cmd:option('--maxOutNorm', -1, 'max norm each layers output neuron weights')
 cmd:option('-weightDecay', 5e-4, 'weight decay')
 cmd:option('--maxNormPeriod', 1, 'Applies MaxNorm Visitor every maxNormPeriod batches')
 cmd:option('--momentum', 0.9, 'momentum') 
-cmd:option('--batchSize', 18, 'number of examples per batch')
+cmd:option('--batchSize', 16, 'number of examples per batch')
 cmd:option('--cuda', true, 'use CUDA')
 cmd:option('--useDevice', 1, 'sets the device (GPU) to use')
 cmd:option('--trainEpochSize', -1, 'number of train examples seen between each epoch')
@@ -91,10 +91,13 @@ train = dp.Optimizer{
   progress = opt.progress
 }
 valid = dp.Evaluator{
+   verbose = true,
+   stats =true,
+   progress = true,
    loss = dp.NLL(),
    feedback = dp.TopCrop{n_top={1,5,10},n_crop=10,center=2},  
    sampler = dp.Sampler{
-      batch_size=math.round(opt.batchSize/10),
+      batch_size=2,
       ppf=ppf
    }
 }
@@ -102,7 +105,7 @@ test = dp.Evaluator{
    loss = dp.NLL(),
    feedback = dp.TopCrop{n_top={1,5,10},n_crop=10,center=2},  
    sampler = dp.Sampler{
-      batch_size=math.round(opt.batchSize/10),
+      batch_size=opt.batchSize,
       ppf=ppf
    }
 }
@@ -120,7 +123,6 @@ xp = dp.Experiment{
    model = mlp,
    optimizer = train,
    validator = valid,
-   tester = test,
    observer = {
       dp.FileLogger(),
       dp.EarlyStopper{
@@ -140,14 +142,6 @@ if opt.cuda then
   xp:cuda()
 end
 
---[[
-if not opt.silent then
-  print"dp.Models :"
-  print(cnn)
-  print"nn.Modules :"
-  print(mlp:toModule(datasource:trainSet():sub(1,32)))
-end
---]]
 xp:verbose(not opt.silent)
 
 xp:run(datasource)
