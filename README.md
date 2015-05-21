@@ -1,5 +1,11 @@
 # Image Classification using VGGNet
 
+## Software
+* CUDA
+* Torch(dp,cunn,cunnx)
+* graphicsmagick
+* torchx
+
 ## Usage
 
 ### Dataset is prepared according to (http://dp.readthedocs.org/en/latest/data/#imagenet)
